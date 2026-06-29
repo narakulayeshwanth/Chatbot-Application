@@ -1,0 +1,11 @@
+flask
+openai
+tensorflow-cpu
+numpy
+python-dotenv
+keras
+nltk
+ddgs
+PyMuPDF
+Pillow
+firebase-admin

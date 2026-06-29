@@ -1,0 +1,34 @@
+{
+  "intents": [
+    {
+      "tag": "greeting",
+      "patterns": ["Hello", "Hi", "Hey", "Good morning", "What's up?"],
+      "responses": ["Hello! How can I help you today?", "Hi there!", "Greetings! What's on your mind?"]
+    },
+    {
+      "tag": "wellbeing",
+      "patterns": ["How are you?", "how are you", "how are u", "how r u", "how do you do", "are you okay", "how's it going", "hows it going"],
+      "responses": ["I'm doing great, thanks for asking! 😊 How can I help you today?", "All systems running smoothly! How about you?", "I'm just an AI, but I'm feeling fantastic! What can I do for you?"]
+    },
+    {
+      "tag": "goodbye",
+      "patterns": ["Bye", "See you later", "Goodbye", "Catch you later", "Farewell"],
+      "responses": ["Goodbye! Have a great day!", "See you later!", "Take care!"]
+    },
+    {
+      "tag": "thanks",
+      "patterns": ["Thanks", "Thank you", "That's helpful", "Thanks a lot", "I appreciate it"],
+      "responses": ["You're welcome!", "Glad I could help!", "Anytime!"]
+    },
+    {
+      "tag": "name",
+      "patterns": ["What is your name?", "Who are you?", "What should I call you?"],
+      "responses": ["I am the lavangam.ai assistant.", "You can call me lavangam.ai!"]
+    },
+    {
+      "tag": "unknown",
+      "patterns": ["asdfghjkl", "123456", "what does the fox say", "gibberish hello blah", "tell me something complex"],
+      "responses": ["I am not entirely sure about that. Let me look it up for you!"]
+    }
+  ]
+}

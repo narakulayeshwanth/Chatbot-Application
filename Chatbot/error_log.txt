@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "C:\AI ChatBot\Chatbot\app.py", line 279, in chat
+    else:
+    
+  File "C:\AI ChatBot\Chatbot\ml_engine.py", line 50, in predict_class
+  File "C:\Users\Acer\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\keras\src\utils\traceback_utils.py", line 122, in error_handler
+    raise e.with_traceback(filtered_tb) from None
+  File "C:\Users\Acer\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\keras\src\utils\io_utils.py", line 111, in print_msg
+    sys.stdout.flush()
+    ~~~~~~~~~~~~~~~~^^
+OSError: [Errno 22] Invalid argument
