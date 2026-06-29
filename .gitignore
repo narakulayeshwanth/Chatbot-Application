@@ -1,0 +1,101 @@
+# ============================================================
+# Python AI Chatbot — .gitignore
+# ============================================================
+
+# ------------------------------------------------------------
+# 🔐 SECRETS & CREDENTIALS  (never commit these)
+# ------------------------------------------------------------
+**/.env
+**/*.env
+**/firebase-adminsdk.json
+**/*-adminsdk*.json
+**/*serviceAccount*.json
+
+# ------------------------------------------------------------
+# 🐍 Python cache & compiled files
+# ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# ------------------------------------------------------------
+# 📦 Virtual environments
+# ------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+.env/
+Pipfile.lock
+
+# ------------------------------------------------------------
+# 📝 Logs & runtime output
+# ------------------------------------------------------------
+*.log
+error_log.txt
+output.txt
+
+# ------------------------------------------------------------
+# 🧠 Runtime-generated data files
+# (memory.json is regenerated at runtime — not source code)
+# ------------------------------------------------------------
+Chatbot/memory.json
+
+# ------------------------------------------------------------
+# 📤 Uploaded files (temporary user uploads)
+# ------------------------------------------------------------
+Chatbot/uploads/
+
+# ------------------------------------------------------------
+# 🏗️ Build & distribution
+# ------------------------------------------------------------
+build/
+dist/
+*.egg-info/
+*.egg
+wheels/
+*.whl
+MANIFEST
+
+# ------------------------------------------------------------
+# 🖥️ IDE & editor folders
+# ------------------------------------------------------------
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ------------------------------------------------------------
+# 🍎 macOS
+# ------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ------------------------------------------------------------
+# 🪟 Windows
+# ------------------------------------------------------------
+Thumbs.db
+Thumbs.db:encdata
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ------------------------------------------------------------
+# 🧪 Test & coverage artifacts
+# ------------------------------------------------------------
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# NOT ignored (explicitly kept):
+# Chatbot/static/       — frontend assets
+# Chatbot/templates/    — HTML templates
+# Chatbot/model/        — trained ML model files
+# Chatbot/requirements.txt
+# README.md
