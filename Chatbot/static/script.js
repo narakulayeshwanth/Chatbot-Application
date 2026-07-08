@@ -1,233 +1,442 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-import { getAuth, signInWithCustomToken, signInWithCredential, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+/**
+ * lavangam.ai — Web Application Script
+ * Pure web version: Firebase Auth (signInWithPopup), sessions, chat, file upload.
+ * No desktop bridge / pywebview dependencies.
+ */
 
+import { initializeApp }            from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup,
+         signInWithEmailAndPassword, createUserWithEmailAndPassword,
+         onAuthStateChanged, signOut }
+    from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+
+// ── Firebase Config ─────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: "AIzaSyB_6wZtBzz3ZL43fy35ObzDw_N5ZN14i88",
-  authDomain: "chatbot-3816c.firebaseapp.com",
-  projectId: "chatbot-3816c",
-  storageBucket: "chatbot-3816c.firebasestorage.app",
-  messagingSenderId: "198904505315",
-  appId: "1:198904505315:web:f0f6cfc220fc74817376d6",
-  measurementId: "G-DM3NFY8SX9"
+    apiKey:            "AIzaSyB_6wZtBzz3ZL43fy35ObzDw_N5ZN14i88",
+    authDomain:        "chatbot-3816c.firebaseapp.com",
+    projectId:         "chatbot-3816c",
+    storageBucket:     "chatbot-3816c.firebasestorage.app",
+    messagingSenderId: "198904505315",
+    appId:             "1:198904505315:web:f0f6cfc220fc74817376d6",
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+const fbApp  = initializeApp(firebaseConfig);
+const auth   = getAuth(fbApp);
 
-let authToken = null;
-let currentUser = null;
+// ── State ───────────────────────────────────────────────────────
+let currentUser      = null;
+let authToken        = null;
+let currentSessionId = null;
+let isTyping         = false;
+let selectedFile     = null;
 
-// Always get a fresh (non-expired) token before API calls
+// ── DOM Refs ────────────────────────────────────────────────────
+const authOverlay     = document.getElementById('authModal');
+const appShell        = document.getElementById('appShell');
+const googleLoginBtn  = document.getElementById('googleLoginBtn');
+const emailAuthForm   = document.getElementById('emailAuthForm');
+const emailBtnText    = document.getElementById('emailBtnText');
+const emailBtnSpinner = document.getElementById('emailBtnSpinner');
+const authError       = document.getElementById('authError');
+
+const chatbox         = document.getElementById('chatbox');
+const welcomeScreen   = document.getElementById('welcomeScreen');
+const userInput       = document.getElementById('userInput');
+const sendBtn         = document.getElementById('sendBtn');
+const loader          = document.getElementById('loader');
+const fileUpload      = document.getElementById('fileUpload');
+const uploadBtn       = document.getElementById('uploadBtn');
+const filePreview     = document.getElementById('filePreview');
+const filePreviewName = document.getElementById('filePreviewName');
+const historyList     = document.getElementById('historyList');
+const newChatBtn      = document.getElementById('newChatBtn');
+const logoutBtn       = document.getElementById('logoutBtn');
+const userAvatarEl    = document.getElementById('userAvatar');
+const userNameEl      = document.getElementById('userName');
+const userEmailEl     = document.getElementById('userEmail');
+const themeToggleBtn  = document.getElementById('themeToggleBtn');
+const themeIcon       = document.getElementById('themeIcon');
+const themeText       = document.getElementById('themeText');
+const hamburger       = document.getElementById('hamburger');
+const sidebar         = document.getElementById('sidebar');
+const sidebarOverlay  = document.getElementById('sidebarOverlay');
+const headerThemeBtn  = document.getElementById('headerThemeBtn');
+
+// ── Auth Token Helper ───────────────────────────────────────────
 async function getFreshToken() {
     if (!currentUser) return null;
     try {
-        authToken = await currentUser.getIdToken(false); // use cached if still valid
+        authToken = await currentUser.getIdToken(false);
         return authToken;
-    } catch (e) {
-        console.error('Token refresh error:', e);
+    } catch {
         return authToken;
     }
 }
 
-const authModal = document.getElementById('authModal');
-const appLayout = document.getElementById('appLayout');
-const userNameEl = document.getElementById('userName');
-const userAvatarEl = document.getElementById('userAvatar');
-const googleLoginBtn = document.getElementById('googleLoginBtn');
-const emailAuthForm = document.getElementById('emailAuthForm');
-const authError = document.getElementById('authError');
-const logoutBtn = document.getElementById('logoutBtn');
+// ── Show / Hide Auth ─────────────────────────────────────────────
+function showAuth() {
+    authOverlay.classList.remove('hidden');
+    appShell.style.display = 'none';
+}
 
-// Auth State Observer
+function showApp(user) {
+    authOverlay.classList.add('hidden');
+    appShell.style.display = 'flex';
+    userNameEl.textContent  = user.displayName || user.email?.split('@')[0] || 'User';
+    userEmailEl.textContent = user.email || '';
+    userAvatarEl.textContent = (user.displayName || user.email || 'U')[0].toUpperCase();
+}
+
+function showAuthError(msg) {
+    authError.textContent = msg;
+    authError.classList.remove('hidden');
+}
+
+function clearAuthError() {
+    authError.classList.add('hidden');
+}
+
+// ── Auth State ──────────────────────────────────────────────────
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
-        authToken = await user.getIdToken();
-        authModal.classList.add('hidden');
-        appLayout.style.display = 'flex';
-        userNameEl.textContent = user.displayName || user.email.split('@')[0];
-        userAvatarEl.textContent = (user.displayName || user.email)[0].toUpperCase();
-        loadSessions(); // Load sessions now that we have a token
-        if (!currentSessionId && chatbox.children.length === 0) {
-            setTimeout(() => {
-                appendMessage("Hi, I'm lavangam.ai. I can help visualize data, parse files, or answer questions. How can I help you today?", "bot");
-            }, 300);
+        authToken   = await user.getIdToken();
+        showApp(user);
+        loadSessions();
+        if (!currentSessionId && chatbox.querySelector('.welcome-screen')) {
+            // welcome screen already shown
         }
     } else {
         currentUser = null;
-        authToken = null;
-        authModal.classList.remove('hidden');
-        appLayout.style.display = 'none';
+        authToken   = null;
+        showAuth();
     }
 });
 
-// Google Login (Desktop Bridge Flow)
+// ── Google Sign-In (Popup — works in all browsers) ──────────────
 googleLoginBtn.addEventListener('click', async () => {
+    clearAuthError();
+    googleLoginBtn.disabled    = true;
+    googleLoginBtn.textContent = 'Opening sign-in...';
     try {
-        const sessionId = Math.random().toString(36).substring(2, 15);
-        const loginUrl = `http://localhost:5050/login?session_id=${sessionId}`;
-        
-        // Use the backend bridge to reliably open the OS default browser
-        await fetch(`/api/open-browser?url=${encodeURIComponent(loginUrl)}`);
-        
-        googleLoginBtn.disabled = true;
-        googleLoginBtn.textContent = 'Waiting for browser login...';
-        
-        // Poll for the token
-        const pollInterval = setInterval(async () => {
-            try {
-                const res = await fetch(`/api/poll-token?session_id=${sessionId}`);
-                const data = await res.json();
-                
-                if (data.status === 'success') {
-                    clearInterval(pollInterval);
-
-                    // Store the Firebase ID token directly — no client re-auth needed
-                    authToken = data.token;
-                    const user = data.user;
-
-                    // Create a mock currentUser so getFreshToken() works
-                    currentUser = {
-                        uid: user.uid,
-                        email: user.email,
-                        displayName: user.name,
-                        getIdToken: async () => authToken
-                    };
-
-                    // Manually update UI (onAuthStateChanged won't fire for this path)
-                    authModal.classList.add('hidden');
-                    appLayout.style.display = 'flex';
-                    userNameEl.textContent = user.name || user.email?.split('@')[0] || 'User';
-                    userAvatarEl.textContent = (user.name || user.email || 'U')[0].toUpperCase();
-
-                    loadSessions();
-                    if (!currentSessionId && chatbox.children.length === 0) {
-                        setTimeout(() => {
-                            appendMessage("Hi, I'm lavangam.ai. I can help visualize data, parse files, or answer questions. How can I help you today?", "bot");
-                        }, 300);
-                    }
-
-                    authError.classList.add('hidden');
-                    googleLoginBtn.disabled = false;
-                    googleLoginBtn.innerHTML = 'Continue with Google';
-                }
-            } catch (err) {
-                clearInterval(pollInterval);
-                googleLoginBtn.disabled = false;
-                googleLoginBtn.innerHTML = 'Continue with Google';
-                authError.textContent = "Sign in error: " + err.message;
-                authError.classList.remove('hidden');
-            }
-        }, 2000);
-        
-    } catch (error) {
-        googleLoginBtn.disabled = false;
-        googleLoginBtn.innerHTML = 'Continue with Google';
-        authError.textContent = "Failed to open browser or authenticate.";
-        authError.classList.remove('hidden');
-    }
-});
-
-// Email Login / Signup
-emailAuthForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email = document.getElementById('authEmail').value;
-    const password = document.getElementById('authPassword').value;
-    authError.classList.add('hidden');
-    const btn = document.getElementById('emailLoginBtn');
-    btn.textContent = 'Signing in...';
-    btn.disabled = true;
-    try {
-        // Always try sign-in first
-        await signInWithEmailAndPassword(auth, email, password);
-        authError.classList.add('hidden');
-    } catch (error) {
-        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-email') {
-            // Account doesn't exist — try to register
-            try {
-                await createUserWithEmailAndPassword(auth, email, password);
-                authError.classList.add('hidden');
-            } catch (err) {
-                if (err.code === 'auth/email-already-in-use') {
-                    authError.textContent = '⚠️ Account exists but password is wrong. Please check your password.';
-                } else if (err.code === 'auth/weak-password') {
-                    authError.textContent = '⚠️ Password must be at least 6 characters.';
-                } else {
-                    authError.textContent = err.message;
-                }
-                authError.classList.remove('hidden');
-            }
-        } else if (error.code === 'auth/wrong-password') {
-            authError.textContent = '⚠️ Incorrect password. Please try again.';
-            authError.classList.remove('hidden');
-        } else if (error.code === 'auth/too-many-requests') {
-            authError.textContent = '⚠️ Too many failed attempts. Please wait and try again.';
-            authError.classList.remove('hidden');
-        } else {
-            authError.textContent = error.message;
-            authError.classList.remove('hidden');
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+        // onAuthStateChanged handles the rest
+    } catch (err) {
+        if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+            showAuthError('Google sign-in failed: ' + (err.message || 'Unknown error'));
         }
     } finally {
-        btn.textContent = 'Sign In / Register';
-        btn.disabled = false;
+        googleLoginBtn.disabled = false;
+        googleLoginBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg> Continue with Google`;
     }
 });
 
-// Logout
-logoutBtn.addEventListener('click', () => {
-    signOut(auth);
+// ── Email Auth ──────────────────────────────────────────────────
+emailAuthForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearAuthError();
+    const email    = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+
+    emailBtnText.textContent = 'Signing in...';
+    emailBtnSpinner.classList.remove('hidden');
+    document.getElementById('emailLoginBtn').disabled = true;
+
+    try {
+        await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+        if (['auth/user-not-found','auth/invalid-credential','auth/invalid-email'].includes(err.code)) {
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+            } catch (regErr) {
+                const msgs = {
+                    'auth/email-already-in-use': '⚠️ Account exists but password is wrong.',
+                    'auth/weak-password':         '⚠️ Password must be at least 6 characters.',
+                };
+                showAuthError(msgs[regErr.code] || regErr.message);
+            }
+        } else if (err.code === 'auth/wrong-password') {
+            showAuthError('⚠️ Incorrect password. Please try again.');
+        } else if (err.code === 'auth/too-many-requests') {
+            showAuthError('⚠️ Too many attempts. Please wait and try again.');
+        } else {
+            showAuthError(err.message);
+        }
+    } finally {
+        emailBtnText.textContent = 'Sign In / Register';
+        emailBtnSpinner.classList.add('hidden');
+        document.getElementById('emailLoginBtn').disabled = false;
+    }
 });
 
-const chatbox = document.getElementById('chatbox');
-const userInput = document.getElementById('userInput');
-const sendBtn = document.getElementById('sendBtn');
-const loader = document.getElementById('loader');
+// ── Logout ──────────────────────────────────────────────────────
+logoutBtn.addEventListener('click', () => signOut(auth));
 
-// Sidebar and tool elements
-const fileUpload = document.getElementById('fileUpload');
-const uploadBtn = document.getElementById('uploadBtn');
-const filePreview = document.getElementById('filePreview');
-const newChatBtn = document.querySelector('.new-chat-btn');
-const historyListContainer = document.querySelector('.history-list');
+// ── Theme ───────────────────────────────────────────────────────
+const sunSVG  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+const moonSVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
 
-let isTyping = false;
-let selectedFile = null;
-let currentSessionId = null;
-
-// Auto-expand textarea
-userInput.addEventListener('input', function() {
-    this.style.height = 'auto';
-    this.style.height = (this.scrollHeight) + 'px';
-    
-    if (this.value.trim() !== '' || selectedFile) {
-        sendBtn.removeAttribute('disabled');
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('lavangam-theme', theme);
+    if (theme === 'light') {
+        themeIcon.innerHTML = sunSVG;
+        themeText.textContent = 'Light Mode';
     } else {
-        sendBtn.setAttribute('disabled', 'true');
+        themeIcon.innerHTML = moonSVG;
+        themeText.textContent = 'Dark Mode';
     }
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'light' ? 'dark' : 'light');
+}
+
+applyTheme(localStorage.getItem('lavangam-theme') || 'dark');
+themeToggleBtn.addEventListener('click', toggleTheme);
+headerThemeBtn.addEventListener('click', toggleTheme);
+
+// ── Mobile Sidebar ───────────────────────────────────────────────
+function openSidebar() {
+    sidebar.classList.add('open');
+    sidebarOverlay.classList.add('visible');
+    hamburger.setAttribute('aria-expanded', 'true');
+}
+
+function closeSidebar() {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('visible');
+    hamburger.setAttribute('aria-expanded', 'false');
+}
+
+hamburger.addEventListener('click', () => {
+    sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
 });
 
-// File Handling
+sidebarOverlay.addEventListener('click', closeSidebar);
+
+// ── Session Management ──────────────────────────────────────────
+async function loadSessions() {
+    try {
+        const token = await getFreshToken();
+        if (!token) return;
+        const res  = await fetch('/sessions', { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return;
+        const data = await res.json();
+        renderSessions(data.sessions || []);
+    } catch { /* silent */ }
+}
+
+function renderSessions(sessions) {
+    historyList.innerHTML = '<p class="history-label">Chat History</p>';
+    if (sessions.length === 0) {
+        historyList.innerHTML += '<p class="history-empty">No chats yet. Start a conversation!</p>';
+        return;
+    }
+    sessions.forEach(s => {
+        const div       = document.createElement('div');
+        div.className   = 'history-item' + (s.id === currentSessionId ? ' active' : '');
+        div.setAttribute('role', 'listitem');
+        div.setAttribute('tabindex', '0');
+
+        const title     = document.createElement('span');
+        title.className = 'history-title-text';
+        title.textContent = s.title || 'Untitled Chat';
+
+        const del       = document.createElement('span');
+        del.className   = 'delete-chat-btn';
+        del.innerHTML   = '🗑';
+        del.title       = 'Delete chat';
+        del.onclick     = (e) => { e.stopPropagation(); confirmDeleteSession(s.id); };
+
+        div.appendChild(title);
+        div.appendChild(del);
+        div.onclick  = () => loadSession(s.id);
+        div.onkeydown = (e) => e.key === 'Enter' && loadSession(s.id);
+        historyList.appendChild(div);
+    });
+}
+
+async function confirmDeleteSession(id) {
+    if (!confirm('Delete this chat history?')) return;
+    try {
+        const token = await getFreshToken();
+        const res   = await fetch(`/session/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+            if (currentSessionId === id) startNewChat();
+            else loadSessions();
+        }
+    } catch { /* silent */ }
+}
+
+async function loadSession(id) {
+    currentSessionId = id;
+    chatbox.innerHTML = '';
+    closeSidebar();
+    loadSessions(); // refresh active state
+
+    try {
+        const token = await getFreshToken();
+        const res   = await fetch(`/session/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return;
+        const data  = await res.json();
+        if (data.history?.length) {
+            data.history.forEach(m => {
+                appendMessage(m.user, 'user');
+                appendMessage(m.bot,  'bot');
+            });
+        }
+    } catch { /* silent */ }
+}
+
+function startNewChat() {
+    currentSessionId = null;
+    chatbox.innerHTML = '';
+    chatbox.appendChild(buildWelcomeScreen());
+    loadSessions();
+    closeSidebar();
+}
+
+newChatBtn.addEventListener('click', startNewChat);
+
+// ── Welcome Screen Builder ──────────────────────────────────────
+function buildWelcomeScreen() {
+    const ws = document.createElement('div');
+    ws.className = 'welcome-screen';
+    ws.id = 'welcomeScreen';
+    ws.innerHTML = welcomeScreen ? welcomeScreen.innerHTML : '';
+    // Re-attach suggestion chip listeners
+    ws.querySelectorAll('.suggestion-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            userInput.value = chip.dataset.prompt || chip.textContent.trim();
+            userInput.dispatchEvent(new Event('input'));
+            sendMessage();
+        });
+    });
+    return ws;
+}
+
+// Attach suggestion chip listeners to initial welcome screen
+document.querySelectorAll('.suggestion-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+        userInput.value = chip.dataset.prompt || chip.textContent.trim();
+        userInput.dispatchEvent(new Event('input'));
+        sendMessage();
+    });
+});
+
+// ── Append Message ──────────────────────────────────────────────
+function appendMessage(text, sender, typeEffect = false) {
+    // Remove welcome screen on first message
+    const ws = chatbox.querySelector('.welcome-screen');
+    if (ws) ws.remove();
+
+    const wrap   = document.createElement('div');
+    wrap.className = `message ${sender}`;
+    wrap.innerHTML = `
+        <div class="message-inner">
+            <div class="message-avatar" aria-hidden="true">${sender === 'bot' ? 'L' : 'U'}</div>
+            <div class="message-content"></div>
+        </div>`;
+
+    chatbox.appendChild(wrap);
+    const content = wrap.querySelector('.message-content');
+
+    if (sender === 'bot') {
+        if (typeEffect) {
+            const tokens    = text.match(/[\s\n]+|\S+/g) || [];
+            let rendered    = '';
+            let idx         = 0;
+            const tick = setInterval(() => {
+                if (idx < tokens.length) {
+                    rendered += tokens[idx++];
+                    content.innerHTML = marked.parse(rendered);
+                    chatbox.scrollTop = chatbox.scrollHeight;
+                } else {
+                    clearInterval(tick);
+                    addCopyButtons(content);
+                }
+            }, 18);
+        } else {
+            content.innerHTML = marked.parse(text);
+            addCopyButtons(content);
+        }
+    } else {
+        const p = document.createElement('div');
+        p.textContent     = text;
+        p.style.whiteSpace = 'pre-wrap';
+        content.appendChild(p);
+    }
+
+    chatbox.scrollTop = chatbox.scrollHeight;
+    return wrap;
+}
+
+// ── Copy buttons for code blocks ────────────────────────────────
+function addCopyButtons(container) {
+    container.querySelectorAll('pre').forEach(pre => {
+        if (pre.querySelector('.copy-btn')) return;
+        const btn       = document.createElement('button');
+        btn.className   = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.style.cssText = 'position:absolute;top:8px;right:8px;padding:3px 9px;font-size:0.72rem;border-radius:5px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.08);color:#94a3b8;cursor:pointer;transition:all 0.15s;';
+        btn.onclick = async () => {
+            const code = pre.querySelector('code')?.textContent || pre.textContent;
+            await navigator.clipboard.writeText(code).catch(() => {});
+            btn.textContent = 'Copied!';
+            btn.style.color = '#4ade80';
+            setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = '#94a3b8'; }, 2000);
+        };
+        pre.style.position = 'relative';
+        pre.appendChild(btn);
+    });
+}
+
+// ── Loading State ───────────────────────────────────────────────
+function setLoading(active) {
+    isTyping = active;
+    loader.classList.toggle('hidden', !active);
+    sendBtn.disabled        = active;
+    userInput.disabled      = active;
+    uploadBtn.disabled      = active;
+    if (active) chatbox.scrollTop = chatbox.scrollHeight;
+    else userInput.focus();
+}
+
+// ── File Handling ───────────────────────────────────────────────
 uploadBtn.addEventListener('click', () => fileUpload.click());
 
 fileUpload.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
-        selectedFile = e.target.files[0];
-        filePreview.innerHTML = `<span>📎 ${selectedFile.name}</span> <div class="clear-btn" onclick="clearFile()">✖</div>`;
+        selectedFile            = e.target.files[0];
+        filePreviewName.textContent = selectedFile.name;
         filePreview.classList.remove('hidden');
-        sendBtn.removeAttribute('disabled');
+        sendBtn.disabled        = false;
     }
 });
 
 window.clearFile = function() {
-    selectedFile = null;
-    fileUpload.value = '';
+    selectedFile           = null;
+    fileUpload.value       = '';
     filePreview.classList.add('hidden');
-    if(userInput.value.trim() === '') {
-        sendBtn.setAttribute('disabled', 'true');
-    }
+    if (!userInput.value.trim()) sendBtn.disabled = true;
 };
 
-userInput.addEventListener('keydown', function(e) {
+// ── Textarea Auto-resize ─────────────────────────────────────────
+userInput.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = this.scrollHeight + 'px';
+    sendBtn.disabled  = !this.value.trim() && !selectedFile;
+});
+
+userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
@@ -236,267 +445,46 @@ userInput.addEventListener('keydown', function(e) {
 
 sendBtn.addEventListener('click', sendMessage);
 
-function toggleLoading(state) {
-    isTyping = state;
-    if (state) {
-        sendBtn.setAttribute('disabled', 'true');
-        userInput.setAttribute('disabled', 'true');
-        uploadBtn.setAttribute('disabled', 'true');
-        loader.classList.remove('hidden');
-        chatbox.scrollTop = chatbox.scrollHeight;
-    } else {
-        userInput.removeAttribute('disabled');
-        uploadBtn.removeAttribute('disabled');
-        loader.classList.add('hidden');
-        userInput.focus();
-    }
-}
-
-function appendMessage(text, sender, typeEffect = false) {
-    const msgDiv = document.createElement('div');
-    msgDiv.classList.add('message', sender);
-    
-    msgDiv.innerHTML = `
-        <div class="message-inner">
-            <div class="message-avatar">${sender === 'bot' ? 'L' : 'U'}</div>
-            <div class="message-content"></div>
-        </div>`;
-    
-    chatbox.appendChild(msgDiv);
-    const contentDiv = msgDiv.querySelector('.message-content');
-
-    if (sender === 'bot') {
-        if (typeEffect) {
-            const tokens = text.match(/[\s\n]+|\S+/g) || [];
-            let currentText = '';
-            let tokenIndex = 0;
-            const typingInterval = setInterval(() => {
-                if (tokenIndex < tokens.length) {
-                    currentText += tokens[tokenIndex];
-                    contentDiv.innerHTML = marked.parse(currentText);
-                    chatbox.scrollTop = chatbox.scrollHeight;
-                    tokenIndex++;
-                } else {
-                    clearInterval(typingInterval);
-                }
-            }, 20);
-        } else {
-            contentDiv.innerHTML = marked.parse(text);
-        }
-    } else {
-        const p = document.createElement('div');
-        p.textContent = text;
-        p.style.fontFamily = "inherit";
-        p.style.whiteSpace = "pre-wrap";
-        p.style.margin = "0";
-        contentDiv.appendChild(p);
-    }
-    
-    chatbox.scrollTop = chatbox.scrollHeight;
-}
-
-// ==== SESSION MANAGEMENT ====
-
-async function loadSessions() {
-    try {
-        const token = await getFreshToken();
-        if (!token) return;
-        
-        const res = await fetch('/sessions', { headers: { 'Authorization': `Bearer ${token}` } });
-        if (!res.ok) {
-            console.error('Sessions fetch failed:', res.status);
-            return;
-        }
-        const data = await res.json();
-        const sessions = data.sessions || [];
-        
-        historyListContainer.innerHTML = '<p class="history-title">Chat History</p>';
-        
-        if (sessions.length === 0) {
-            const empty = document.createElement('p');
-            empty.className = 'history-empty';
-            empty.textContent = 'No previous chats';
-            historyListContainer.appendChild(empty);
-            return;
-        }
-        
-        sessions.forEach(session => {
-            const div = document.createElement('div');
-            div.className = 'history-item';
-            
-            const titleSpan = document.createElement('span');
-            titleSpan.className = 'history-title-text';
-            titleSpan.textContent = session.title;
-            div.appendChild(titleSpan);
-            
-            const deleteBtn = document.createElement('span');
-            deleteBtn.className = 'delete-chat-btn';
-            deleteBtn.innerHTML = '🗑️';
-            deleteBtn.title = 'Delete Chat';
-            deleteBtn.onclick = (e) => {
-                e.stopPropagation();
-                deleteSession(session.id);
-            };
-            div.appendChild(deleteBtn);
-            
-            if (session.id === currentSessionId) {
-                div.classList.add('active');
-            }
-            div.onclick = () => loadSession(session.id);
-            historyListContainer.appendChild(div);
-        });
-    } catch (e) {
-        console.error("Failed to load sessions", e);
-    }
-}
-
-async function deleteSession(sessionId) {
-    if (!confirm("Are you sure you want to delete this chat history?")) return;
-    try {
-        const token = await getFreshToken();
-        const res = await fetch(`/session/${sessionId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-        if (res.ok) {
-            if (currentSessionId === sessionId) {
-                newChatBtn.click();
-            } else {
-                loadSessions();
-            }
-        }
-    } catch (e) {
-        console.error("Failed to delete session", e);
-    }
-}
-
-async function loadSession(sessionId) {
-    currentSessionId = sessionId;
-    chatbox.innerHTML = '';
-    
-    // Highlight correct item
-    loadSessions();
-
-    try {
-        const token = await getFreshToken();
-        const res = await fetch(`/session/${sessionId}`, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (!res.ok) {
-            console.error('Load session failed:', res.status);
-            return;
-        }
-        const data = await res.json();
-        
-        if (data.history && data.history.length > 0) {
-            data.history.forEach(msg => {
-                appendMessage(msg.user, 'user');
-                appendMessage(msg.bot, 'bot');
-            });
-        } else {
-            appendMessage("No messages found in this chat.", 'bot');
-        }
-    } catch (e) {
-        console.error("Failed to load session", e);
-    }
-}
-
-newChatBtn.addEventListener('click', () => {
-    currentSessionId = null;
-    chatbox.innerHTML = '';
-    loadSessions();
-    setTimeout(() => {
-        appendMessage("Hi, I'm lavangam.ai. I can help visualize data, parse files, or answer questions. How can I help you today?", "bot");
-    }, 300);
-});
-
+// ── Send Message ─────────────────────────────────────────────────
 async function sendMessage() {
-    const text = userInput.value;
-    if ((!text.trim() && !selectedFile) || isTyping) return;
+    const text = userInput.value.trim();
+    if ((!text && !selectedFile) || isTyping) return;
 
     let displayMsg = text;
-    if (selectedFile && !text.trim()) {
-        displayMsg = `[Shared a file: ${selectedFile.name}]`;
-    } else if (selectedFile) {
-        displayMsg += `\n\n[Shared a file: ${selectedFile.name}]`;
-    }
+    if (selectedFile && !text)   displayMsg = `[Shared: ${selectedFile.name}]`;
+    else if (selectedFile)       displayMsg += `\n[Shared: ${selectedFile.name}]`;
 
     appendMessage(displayMsg, 'user');
-    userInput.value = '';
+    userInput.value       = '';
     userInput.style.height = 'auto';
-    
-    sendBtn.setAttribute('disabled', 'true');
-    
-    toggleLoading(true);
-    
-    const formData = new FormData();
-    formData.append('message', text.trim());
-    if (currentSessionId) {
-        formData.append('session_id', currentSessionId);
-    }
-    if (selectedFile) {
-        formData.append('file', selectedFile);
-    }
+    sendBtn.disabled      = true;
+    setLoading(true);
+
+    const form = new FormData();
+    form.append('message', text);
+    if (currentSessionId) form.append('session_id', currentSessionId);
+    if (selectedFile)     form.append('file', selectedFile);
 
     try {
         const token = await getFreshToken();
-        const response = await fetch('/chat', {
-            headers: { 'Authorization': `Bearer ${token}` },
-            method: 'POST',
-            body: formData
+        const res   = await fetch('/chat', {
+            method:  'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body:    form,
         });
-        
-        const data = await response.json();
-        appendMessage(data.response, 'bot', true);
-        
+        const data  = await res.json();
+        appendMessage(data.response || '⚠️ No response received.', 'bot', true);
+
         if (data.session_id) {
-            const wasNew = !currentSessionId;
+            const wasNew     = !currentSessionId;
             currentSessionId = data.session_id;
-            if (wasNew) {
-                // Reload session list to show new chat
-                loadSessions();
-            }
+            if (wasNew) loadSessions();
         }
-    } catch (error) {
-        console.error('Error fetching chat:', error);
-        appendMessage("Network error. Could not reach the server.", 'bot');
+    } catch (err) {
+        console.error('Chat error:', err);
+        appendMessage('⚠️ Network error. Could not reach the server.', 'bot');
     } finally {
-        toggleLoading(false);
+        setLoading(false);
         clearFile();
     }
 }
-
-// Initialization
-document.addEventListener('DOMContentLoaded', () => {
-    // Default greeting if no session
-    setTimeout(() => {
-        if (!currentSessionId && chatbox.children.length === 0) {
-            appendMessage("Hi, I'm lavangam.ai. I can help visualize data, parse files, or answer questions. How can I help you today?", "bot");
-        }
-    }, 300);
-});
-
-// Theme Management
-const themeToggleBtn = document.getElementById('themeToggleBtn');
-const themeIcon = document.getElementById('themeIcon');
-const themeText = document.getElementById('themeText');
-
-const sunIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`;
-const moonIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
-
-function setTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-    if (theme === 'light') {
-        themeIcon.innerHTML = sunIcon;
-        themeText.textContent = 'Light Mode';
-    } else {
-        themeIcon.innerHTML = moonIcon;
-        themeText.textContent = 'Dark Mode';
-    }
-}
-
-// Load saved theme
-const savedTheme = localStorage.getItem('theme') || 'dark';
-setTheme(savedTheme);
-
-themeToggleBtn.addEventListener('click', () => {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-});

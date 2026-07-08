@@ -1,11 +1,15 @@
 flask
-openai
+requests
+beautifulsoup4
+lxml
+ddgs
 tensorflow-cpu
 numpy
 python-dotenv
 keras
 nltk
-ddgs
 PyMuPDF
 Pillow
 firebase-admin
+gunicorn
+scikit-learn

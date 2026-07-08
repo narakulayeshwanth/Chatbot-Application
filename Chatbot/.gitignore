@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+*.whl
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Environment variables & secrets — NEVER commit these
+.env
+*.env
+firebase-adminsdk.json
+*-adminsdk*.json
+serviceAccountKey.json
+firebase_credentials.json
+
+# Local ML model assets (large binary files)
+chatbot_model.h5
+chatbot_model.keras
+words.pkl
+classes.pkl
+
+# Uploads folder (user data)
+uploads/
+
+# Session/memory data (user private data)
+memory.json
+sessions/
+
+# Test/scratch files
+output.txt
+f1test.txt
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Pywebview (desktop only, no longer needed)
+pywebview/

@@ -24,7 +24,7 @@ if not isinstance(sys.stdout, _SafeStdout):
 if not isinstance(sys.stderr, _SafeStdout):
     sys.stderr = _SafeStdout(sys.stderr)
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, make_response
 import logging
 import re
 import traceback
@@ -38,10 +38,7 @@ from memory import load_memory, save_memory, get_all_sessions, delete_session
 import uuid
 import firebase_admin
 from firebase_admin import credentials, auth
-import webbrowser
-import threading
 
-login_tokens = {}
 
 app = Flask(__name__)
 
@@ -124,104 +121,16 @@ def extract_text_from_file(filepath):
             pass
     return text
 
-# === DESKTOP AUTH BRIDGE ROUTES ===
+# === END DESKTOP AUTH BRIDGE (removed — web version uses Firebase signInWithPopup) ===
 
-@app.route('/login')
-@app.route('/desktop-login')
-@app.route('/desktop login')
-@app.route('/desktop%20login')
-def desktop_login():
-    session_id = request.args.get('session_id')
-    return render_template('desktop_login.html', session_id=session_id)
 
-@app.route('/api/open-browser')
-def open_browser():
-    url = request.args.get('url')
-    if url:
-        import platform
-        import subprocess
-        def open_url():
-            try:
-                if platform.system() == 'Windows':
-                    # Use cmd /c start for most reliable browser opening on Windows
-                    subprocess.run(['cmd', '/c', 'start', '', url], shell=False, check=False)
-                else:
-                    webbrowser.open_new(url)
-            except Exception as e:
-                logging.error(f"Error opening browser: {e}")
-                try:
-                    webbrowser.open_new(url)  # fallback
-                except Exception as e2:
-                    logging.error(f"Fallback browser open also failed: {e2}")
-                
-        threading.Thread(target=open_url, daemon=True).start()
-        return jsonify({"status": "success"})
-    return jsonify({"status": "error"}), 400
-
-@app.route('/api/exchange-token', methods=['POST'])
-def exchange_token():
-    data = request.json
-    id_token = data.get('idToken')
-    session_id = data.get('session_id')
-    
-    if not id_token or not session_id:
-        return jsonify({"status": "error", "message": "Missing token"}), 400
-
-    if firebase_initialized:
-        try:
-            # Verify the Firebase ID token from the browser
-            decoded = auth.verify_id_token(id_token, clock_skew_seconds=60)
-            uid = decoded['uid']
-            # Store the token + user info so desktop can use it directly
-            login_tokens[session_id] = {
-                'token': id_token,
-                'uid': uid,
-                'email': decoded.get('email', ''),
-                'name': decoded.get('name', decoded.get('email', 'User'))
-            }
-            logging.info(f"Token verified for uid: {uid}")
-        except Exception as e:
-            logging.error(f"Token exchange error: {e}")
-            return jsonify({"status": "error", "message": str(e)}), 400
-    else:
-        # Mock mode fallback
-        login_tokens[session_id] = {
-            'token': id_token,
-            'uid': 'mock_user_123',
-            'email': 'mock@user.com',
-            'name': 'Mock User'
-        }
-
-    return jsonify({"status": "success"})
-
-@app.route('/api/poll-token')
-def poll_token():
-    session_id = request.args.get('session_id')
-    if session_id in login_tokens:
-        data = login_tokens.pop(session_id)
-        return jsonify({
-            "status": "success",
-            "token": data['token'],
-            "user": {
-                "uid": data['uid'],
-                "email": data['email'],
-                "name": data['name']
-            }
-        })
-    return jsonify({"status": "pending"})
-
-# === END DESKTOP AUTH BRIDGE ===
 
 @app.route('/')
 def index():
-    response = render_template('index.html')
-    # Use make_response to add headers to avoid caching issues in Pywebview
-    from flask import make_response
-    r = make_response(response)
+    r = make_response(render_template('index.html'))
     r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    r.headers["Pragma"] = "no-cache"
-    r.headers["Expires"] = "0"
     return r
+
 
 @app.route('/sessions', methods=['GET'])
 def get_sessions():
@@ -340,40 +249,8 @@ def chat():
         return jsonify({"response": "Server error", "confidence": 0.0}), 500
 
 if __name__ == '__main__':
-    import webview
-    import threading
-    import time as time_mod
-    import urllib.request
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    logging.info(f"Starting lavangam.ai web server on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=debug, threaded=True)
 
-    def start_server():
-        import logging as _log
-        _log.getLogger('werkzeug').setLevel(_log.ERROR)  # suppress Flask noise
-        app.run(port=5050, use_reloader=False, threaded=True)
-
-    def wait_for_server(url, timeout=15):
-        """Poll until Flask server is up, then open WebView."""
-        deadline = time_mod.time() + timeout
-        while time_mod.time() < deadline:
-            try:
-                urllib.request.urlopen(url, timeout=1)
-                return True
-            except Exception:
-                time_mod.sleep(0.2)
-        return False
-
-    t = threading.Thread(target=start_server, daemon=True)
-    t.start()
-
-    base_url = 'http://localhost:5050'
-    if wait_for_server(base_url, timeout=60):
-        window = webview.create_window(
-            'lavangam.ai',
-            base_url,
-            width=1200,
-            height=800,
-            resizable=True,
-            min_size=(800, 600)
-        )
-        webview.start(debug=False)
-    else:
-        print("[ERROR] Flask server did not start in time. Try running again.")
