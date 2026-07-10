@@ -43,11 +43,24 @@ _SKIP_DOMAINS = [
 ]
 
 _PRIORITY_DOMAINS = [
+    "espncricinfo.com", "cricbuzz.com", "cricinfo.com",
     "bbc.com", "reuters.com", "apnews.com", "espn.com",
-    "motorsport.com", "cricinfo.com", "sportingnews.com",
+    "motorsport.com", "sportingnews.com",
     "theguardian.com", "ndtv.com", "hindustantimes.com",
     "timesofindia.com", "cnn.com", "wikipedia.org",
 ]
+
+# Queries about live scores/results — Wikipedia is useless for these
+_LIVE_SCORE_PATTERNS = [
+    r"\b(score|result|standing|points.?table|live|match)\b",
+    r"\b(vs|versus)\b",
+    r"\b(t20|odi|test|ipl|nba|nfl|epl|premier.?league|champions.?league)\b",
+]
+_LIVE_SCORE_COMPILED = [re.compile(p, re.IGNORECASE) for p in _LIVE_SCORE_PATTERNS]
+
+def _is_live_score_query(query: str) -> bool:
+    """Returns True for live scores/results queries — skip Wikipedia for these."""
+    return any(p.search(query) for p in _LIVE_SCORE_COMPILED)
 
 
 def needs_web_search(query: str) -> bool:
@@ -397,7 +410,10 @@ def web_search(query: str, max_results: int = 4) -> str:
             logging.info("F1 API returned no data — falling back to Wikipedia/DDG")
 
     # ── 1. Wikipedia — background context ──
-    if not _is_f1_query(query):   # Skip Wiki for F1 (standings aren't in plain text anyway)
+    # Skip Wikipedia for F1 queries (no live data) and live score queries
+    # (Wikipedia returns irrelevant articles like "Sledging in cricket" for score queries)
+    skip_wiki = _is_f1_query(query) or _is_live_score_query(query)
+    if not skip_wiki:
         wiki_text = _wikipedia_search(query)
         if wiki_text:
             found_anything = True
@@ -427,8 +443,8 @@ def web_search(query: str, max_results: int = 4) -> str:
         lines.append(f"=== {title} ===")
         lines.append(f"URL: {href}")
 
-        if fetched < 2:
-            page_text = _fetch_page_text(href, max_chars=2000)
+        if fetched < 1:  # Only deep-fetch 1 page (faster response)
+            page_text = _fetch_page_text(href, max_chars=1500)
             if page_text and len(page_text) > 150:
                 lines.append(page_text)
                 fetched += 1
