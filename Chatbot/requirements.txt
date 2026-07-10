@@ -3,7 +3,7 @@ requests
 beautifulsoup4
 lxml
 ddgs
-tensorflow-cpu
+tensorflow-cpu==2.15.0
 numpy
 python-dotenv
 keras
