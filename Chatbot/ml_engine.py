@@ -3,13 +3,23 @@ import io
 import sys
 import json
 import pickle
-import numpy as np
 import random
-import tensorflow as tf
-from tensorflow.keras.models import load_model
 from config import MODEL_DIR, INTENTS_FILE
 import nltk
 from nltk.stem import WordNetLemmatizer
+
+# TensorFlow is optional — if not available the ML engine is skipped
+# and all queries fall through to the NVIDIA AI engine
+try:
+    import numpy as np
+    import tensorflow as tf
+    from tensorflow.keras.models import load_model
+    TF_AVAILABLE = True
+except ImportError:
+    TF_AVAILABLE = False
+    tf = None
+    np = None
+    load_model = None
 
 lemmatizer = WordNetLemmatizer()
 
@@ -20,6 +30,9 @@ intents_data = None
 
 def load_ml_assets():
     global words, classes, model, intents_data
+    if not TF_AVAILABLE:
+        print("TensorFlow not available — ML engine disabled. Using AI engine fallback.")
+        return False
     try:
         words = pickle.load(open(os.path.join(MODEL_DIR, "tokenizer.pkl"), "rb"))
         classes = pickle.load(open(os.path.join(MODEL_DIR, "label_encoder.pkl"), "rb"))
@@ -44,6 +57,8 @@ def bag_of_words(sentence):
     return np.array(bag)
 
 def predict_class(sentence):
+    if not TF_AVAILABLE:
+        return "unknown", 0.0
     if not model:
         if not load_ml_assets():
             return "unknown", 0.0

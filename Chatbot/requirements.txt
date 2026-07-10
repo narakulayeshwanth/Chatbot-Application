@@ -3,10 +3,11 @@ requests
 beautifulsoup4
 lxml
 ddgs
-tensorflow-cpu==2.15.0
+# tensorflow-cpu and keras removed — not compatible with Python 3.14
+# ml_engine gracefully falls back to NVIDIA AI engine when TF is absent
 numpy
 python-dotenv
-keras
+
 nltk
 PyMuPDF
 Pillow
