@@ -46,7 +46,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 firebase_initialized = False
 try:
-    cred_path = os.path.join(os.path.dirname(__file__), "firebase-adminsdk.json")
+    cred_path = os.environ.get(
+        "FIREBASE_CRED_PATH",
+        "/etc/secrets/firebase-adminsdk.json"
+    )
+    if not os.path.exists(cred_path):
+        cred_path = os.path.join(os.path.dirname(__file__), "firebase-adminsdk.json")
     if os.path.exists(cred_path):
         cred = credentials.Certificate(cred_path)
         firebase_admin.initialize_app(cred)
